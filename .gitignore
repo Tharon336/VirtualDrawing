@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.env
+
+# Saved drawings
+drawing_*.png
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
