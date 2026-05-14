@@ -33,6 +33,18 @@ requirements         — The Shopping List. Tells Python what extra tools it nee
 
 ```
 
+### Where `hand_landmarker.task` Comes From
+
+This file is a pre-trained AI model provided by Google as part of their **MediaPipe Solutions** library. It is not something you write yourself — you simply download it and place it next to your code.
+
+* **Official download page:** [https://developers.google.com/mediapipe/solutions/vision/hand_landmarker](https://developers.google.com/mediapipe/solutions/vision/hand_landmarker)
+* **Direct download link (float16, latest):** `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task`
+
+To re-download it from the terminal:
+```bash
+curl -o hand_landmarker.task https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task
+```
+
 ---
 
 ## How a Computer "Sees" Your Hand
