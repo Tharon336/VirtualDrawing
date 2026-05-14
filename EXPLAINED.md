@@ -1,213 +1,273 @@
----
+# VirtualDrawing — How It Works
 
-# What This Project Is and How It Works
-
-## (Explained for Someone Who Barely Knows Programming)
+> A complete guide written for beginners. No prior programming knowledge required.
 
 ---
 
-## The Big Picture
+## What This Is
 
-This is a **drawing app that uses your webcam and your hands** — no mouse, no touchscreen. You hold your hands up in front of the camera to change configurations and paint on screen. It's like drawing in the air.
+A drawing app controlled entirely by your hands in front of a webcam — no mouse, no touchscreen, no special hardware beyond the camera built into your laptop.
 
-Here's what it looks like in action:
-
-* Your webcam shows your face/room in the background.
-* A digital canvas (like a transparent sheet of glass) sits on top of the camera feed.
-* The app uses a **Two-Handed System**: one hand changes settings or draws, while the other hand acts as a safety valve.
-* **Global Actions vs. Drawing Actions:** You can change your brush color or size at absolutely any time. However, to actually leave ink on the canvas or erase it, your other hand must grant permission.
+- Your webcam feed plays in the background.
+- An invisible digital canvas floats on top of it, like a sheet of transparent glass.
+- You hold your hands up and make shapes with your fingers to draw, erase, and change settings.
+- One hand draws; the other acts as a safety switch to prevent accidental marks.
 
 ---
 
-## The Files — What Each One Does
+## How to Run It
 
-Think of each `.py` file as a "department" in a company. Each department has one job.
+**1. Set up the environment (first time only)**
 
-```
-main.py              — The Boss. Runs everything, tracks timers, and connects all departments.
-gesture_detector.py  — The Eye. Looks at your hand and interprets its physical shape.
-canvas.py            — The Painter. Manages the hidden drawing grid and stroke paths.
-ui_overlay.py        — The Designer. Draws the toolbar, text labels, and tracking cursors.
-hand_landmarker.task — The Brain (pre-built). A ready-made AI model that finds hands.
-requirements         — The Shopping List. Tells Python what extra tools it needs to install.
-
-```
-
-### Where `hand_landmarker.task` Comes From
-
-This file is a pre-trained AI model provided by Google as part of their **MediaPipe Solutions** library. It is not something you write yourself — you simply download it and place it next to your code.
-
-* **Official download page:** [https://developers.google.com/mediapipe/solutions/vision/hand_landmarker](https://developers.google.com/mediapipe/solutions/vision/hand_landmarker)
-* **Direct download link (float16, latest):** `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task`
-
-To re-download it from the terminal:
 ```bash
-curl -o hand_landmarker.task https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task
+# Create a virtual environment — an isolated sandbox for this project's packages
+python -m venv venv
+
+# Activate it (Mac/Linux)
+source venv/bin/activate
+
+# Install the required libraries
+pip install -r requirements
 ```
+
+**2. Download the AI model (first time only)**
+
+The hand-tracking model is not included in the repo because it is a large binary file.
+Download it and place it in the project folder:
+
+```bash
+curl -o hand_landmarker.task \
+  https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task
+```
+
+Or visit the official page: [developers.google.com/mediapipe/solutions/vision/hand_landmarker](https://developers.google.com/mediapipe/solutions/vision/hand_landmarker)
+
+**3. Run**
+
+```bash
+python main.py
+```
+
+**4. Quit**
+
+Press `q` while the window is focused.
 
 ---
 
-## How a Computer "Sees" Your Hand
+## Gesture Quick Reference
 
-Your webcam captures about 30 images per second (called **frames**). For each frame, the app uses a pre-built AI model called **MediaPipe HandLandmarker** to find your hands.
+| What your left hand does | Gesture name | Lock required? |
+|---|---|---|
+| Point index finger only | **DRAW** — leaves ink on canvas | YES — right-hand fist in lock zone |
+| Point index + middle finger | **HOVER** — moves cursor, no ink | No |
+| Open all 4 fingers flat | **ERASE** — wipes a circle of paint | YES — right-hand fist in lock zone |
+| Touch thumb tip to index tip | **COLOR** — cycles to next color | No |
+| Make a fist | **SIZE** — cycles to next brush size | No (5 s cooldown applies) |
 
-The model returns **21 points** called **landmarks** — imagine 21 tiny tracking dots placed on key joints of your hand:
+**Right hand (lock zone — far right of screen):**
+Make a fist → the lock zone box turns green → drawing and erasing are now enabled.
 
-```
-Tip of index finger = point 8
-Tip of middle finger = point 12
-Tip of ring finger = point 16
-Tip of pinky = point 20
-Tip of thumb = point 4
-Wrist = point 0
+**Edge-triggering:** COLOR and SIZE only fire once when the gesture first appears. Holding the gesture does nothing extra — you must release and re-form it to trigger again.
 
-```
+### Available Colors (cycle with pinch)
 
-Each point has an `x` (how far left/right) and `y` (how far up/down) position, represented as a decimal between 0.0 and 1.0. For example, `x=0.5, y=0.5` means a joint is sitting in the exact center of the video frame.
+White → Red → Orange → Yellow → Green → Cyan → Blue → Violet → Pink → *(loops back)*
 
----
+### Available Brush Sizes (cycle with fist)
 
-## The "Lock Zone" System & Gesture Separation
-
-**Problem:** If drawing activated just by pointing your finger, the app would start sketching lines the moment your hand appeared on screen — even if you were just adjusting your posture or moving your hand out of the way.
-
-**Solution:** The screen is split into two distinct functional zones:
-
-* **Left 70%** = "Painter Zone" — this hand controls configurations, drawing, and erasing.
-* **Right 30%** = "Lock Zone" — this hand acts as a safety switch.
-
-To keep the user experience as fluid as possible, the application handles gestures using two different execution pathways:
-
-1. **Global Configuration (Unlocked):** Changing your brush **Color** (pinching) or brush **Size** (making a fist) works instantly. You do not need your opposite hand to engage the lock to change your preferences.
-2. **Canvas Modification (Locked):** **Drawing** and **Erasing** actually modify the picture. Because of this, they are strictly locked. They will only work if your right hand is inside the Lock Zone making a tight fist. Think of it like a "dead man's switch" on heavy machinery — you must actively hold the switch open to paint.
+3 px → 6 px → 10 px → 16 px → 24 px → 36 px → *(loops back)*
 
 ---
 
-## Gesture Recognition — How the App Reads Hand Shapes
+## How the App Sees Your Hand
 
-File: `gesture_detector.py`
+Your webcam captures roughly 30 images per second, called **frames**. Each frame is passed to a pre-built AI model called **MediaPipe HandLandmarker**.
 
-After the AI hands over the 21 tracking points, this file figures out **what shape your hand is making**.
-
-The trick is simple: **is each finger pointing up or curled down?**
-A finger is considered "up" if its **tip** is higher on screen than its **middle joint** (called the PIP joint). In computer graphics, "higher" means a smaller `y` value because `y=0` sits at the very top of the screen.
+The model locates your hand and returns **21 tracking points** called **landmarks** — one for each key joint:
 
 ```
-Index finger tip  = point 8
-Index finger PIP  = point 6
-
-If point8.y < point6.y → index finger is UP
-
+ 0 = Wrist
+ 4 = Thumb tip
+ 8 = Index finger tip       6 = Index finger middle joint (PIP)
+12 = Middle finger tip      10 = Middle finger middle joint (PIP)
+16 = Ring finger tip        14 = Ring finger middle joint (PIP)
+20 = Pinky tip              18 = Pinky middle joint (PIP)
 ```
 
-By checking all four outer fingers, we count how many are extended. Because a **Fist** is incredibly distinct and reliable for an AI to track, we repurposed it to act as both our Lock trigger and our Thickness modifier!
+Each point has an `x` (left/right) and `y` (up/down) value between `0.0` and `1.0`, where `(0,0)` is the top-left corner of the frame.
 
-| Fingers Up | Gesture Detected | What It Does | Lock Required? |
-| --- | --- | --- | --- |
-| **Index only** | DRAW | Draws a line at your fingertip | **YES** |
-| **All 4 fingers** | ERASE | Wipes away nearby drawings | **YES** |
-| **Thumb touching Index** | COLOR | Cycles to the next toolbar color | NO |
-| **0 fingers (Fist)** | THICKNESS | Cycles brush size (Left) / Engages Lock (Right) | NO |
-| **Index + Middle** | HOVER | Moves cursor smoothly without drawing | NO |
+**How a finger is detected as "up":**
+The tip must be higher on screen than the middle joint. "Higher" means a *smaller* `y` value because `y = 0` is the top of the screen.
 
-### The 5-Second Size Cooldown
+```
+If landmark[8].y  <  landmark[6].y  →  index finger is UP
+```
 
-Because a fist is a "middle-ground" gesture — meaning your hand naturally forms a fist for a split second whenever you open or close your fingers — it is easy to accidentally trigger a brush size change.
-
-To solve this, a **5-second time delay** is built into the engine. The moment you make a fist in the Painter zone, your brush size changes, and a safety lockout timer activates. For the next 5 seconds, any accidental fists are ignored.
+The app checks all four outer fingers and counts how many are extended. That count, plus whether the thumb and index are touching, maps directly to the gestures in the table above.
 
 ---
 
-## The Drawing Canvas — How Strokes Are Stored
+## The Two-Zone System
+
+**Problem:** If drawing activated the moment a finger pointed up, the canvas would fill with unwanted marks every time a hand entered the frame.
+
+**Solution:** The 1280 px wide screen is divided into two zones:
+
+```
+|←————————— Painter Zone (0–900 px) ————————————→|←— Lock Zone (900–1280 px) —→|
+|                  Left 70%                        |        Right 30%            |
+|  Color, Size, Draw, Erase, Hover all happen here | Fist here = safety switch   |
+```
+
+- **Painter zone** (left 70%, wrist x ≤ 900): reads your drawing gestures.
+- **Lock zone** (right 30%, wrist x > 900): only watches for a fist. Anything else is ignored.
+
+Gestures that *change settings* (color, size) work from the painter zone with no lock needed.
+Gestures that *modify the canvas* (draw, erase) require the right-hand lock to be active simultaneously — like a dead man's switch on heavy machinery.
+
+---
+
+## The 5-Second Size Cooldown
+
+A fist is a natural transition shape — your hand briefly passes through it every time you open or close your fingers. Without protection, size would change accidentally dozens of times per session.
+
+**Fix:** After each size change, a 5-second lockout activates. Any fist detected during that window is ignored and the status label changes to `STATUS: SIZE LOCKED (WAIT)`. A countdown (`SIZE LOCK: 3.4s`) ticks in the toolbar until it clears.
+
+---
+
+## The Anti-Flicker System
+
+Computer vision occasionally loses track of a hand for one or two frames due to fast motion or changes in lighting. Without mitigation, this causes the lock to blink off and on, creating jittery, broken strokes.
+
+**Fix:** A grace-period counter called `lock_smoothing_frames` is set to `10` whenever a valid lock fist is detected. If the model misses the fist for a frame, the counter drops by 1 but the lock *stays active*. The lock only disengages after 10 consecutive frames with no fist detected — smoothly absorbing brief tracking drops.
+
+---
+
+## The Drawing Canvas
 
 File: `canvas.py`
 
-The "canvas" is a **grid of numbers in memory** called a **NumPy array**. Think of it as a giant spreadsheet where each cell represents one single pixel on your screen.
+The canvas is an invisible **grid of pixel values** stored in memory as a NumPy array — a fast, maths-friendly table of numbers. Its size matches the video feed exactly:
 
-The canvas matches your video feed at **1280 pixels wide × 720 pixels tall** = 921,600 individual cells. Each cell stores 4 distinct values: Blue, Green, Red, and Alpha (transparency). This is known as **BGRA format**.
+```
+1280 columns × 720 rows = 921,600 pixels
+```
 
-* `Alpha = 0` means completely transparent (the cell is empty, revealing the webcam feed behind it).
-* `Alpha = 255` means completely solid color (you see only the digital paint).
+Each pixel stores four numbers: **B**lue, **G**reen, **R**ed, **A**lpha. This is called **BGRA format** (OpenCV uses BGR instead of the more common RGB — just a different ordering convention).
 
-When drawing a line, the app uses **OpenCV** to track your previous finger coordinate and draw a continuous path to your current coordinate. It applies anti-aliasing (`cv2.LINE_AA`) to ensure lines stay perfectly smooth and crisp rather than jagged. It also plants a tiny solid circle at the tip of each line segment to give your curves clean, rounded caps.
+- `Alpha = 0` → pixel is fully transparent → camera feed shows through
+- `Alpha = 255` → pixel is fully opaque → only paint is visible
 
-### Undo History
+**Drawing a stroke:** OpenCV draws a line from the last known finger position to the current one (`cv2.line`, anti-aliased). A small filled circle is painted at each new tip to give strokes smooth, rounded caps instead of flat cut-offs.
 
-Every time your finger touches down to begin a new stroke, the canvas **saves a snapshop copy of itself** into an internal stack list called `_history`. The system holds onto your last 20 actions. If you invoke an undo command, it discards the broken top layer and restores the last saved spreadsheet state.
+**Erasing:** A circle of 30 px radius around the fingertip is filled with `(0, 0, 0, 0)` — transparent black — effectively cutting a hole in the paint layer.
+
+### Undo
+
+Every time a new stroke begins, the canvas saves a full copy of itself into a stack list (`_history`, max depth 20). Calling `undo()` pops the most recent copy off the stack and replaces the live canvas with it.
+
+### Saving
+
+`canvas.save()` writes the current layer as a transparent PNG file (e.g. `drawing_20260423_170820.png`). The transparency is preserved so the image can be used over any background.
 
 ---
 
-## Blending the Drawing onto the Camera Feed
+## Blending the Canvas onto the Camera Feed
 
-At the tail end of every single frame frame calculation, the transparent canvas must merge seamlessly with your raw incoming webcam footage. This mathematical process is called **alpha blending**:
+At the end of every frame, the transparent paint layer must be merged with the live camera image. This is called **alpha blending**:
 
-$$\text{Final Pixel Color} = (\text{Drawing Pixel} \times \text{Opacity}) + (\text{Camera Pixel} \times (1 - \text{Opacity}))$$
+```
+Final pixel = (Paint pixel × opacity) + (Camera pixel × (1 − opacity))
+```
 
-* If `Opacity = 1.0` (solid paint), the camera pixel is completely covered.
-* If `Opacity = 0.0` (empty canvas), the math drops the drawing completely and passes the raw camera feed straight through.
+- Where `opacity` is the alpha value of that pixel, converted from 0–255 → 0.0–1.0.
+- `opacity = 1.0` → only paint is visible (solid brushstroke).
+- `opacity = 0.0` → only camera is visible (empty canvas area).
+
+This is computed in floating-point for accuracy, then clamped back to 0–255 integers for display.
 
 ---
 
-## The UI Overlay — Indicators and Timers
+## The UI Overlay
 
 File: `ui_overlay.py`
 
-This department handles rendering all visual assets that are not the drawing or the background video:
+Everything drawn on top of the blended image — none of it is part of the canvas or the camera feed:
 
-* **Top Toolbar:** Renders your interactive color palette swatches and brush thickness circles. These act as passive feedback indicators displaying your current brush attributes.
-* **Lock Zone Status Box:** A structural bounding box rendered in the bottom right corner. It glows **Green** (`LOCK: ACTIVE`) when a fist is registered on the right side of the screen, and **Red** (`LOCK: OFF`) when drawing is unauthorized.
-* **Persistent Cooldown Timer:** If your brush size configuration is locked inside its 5-second safety window, an orange countdown indicator dynamically materializes in the top right of your toolbar (e.g., `SIZE LOCK: 3.4s`).
-* **Dynamic Status Label:** Tucked into the bottom-left corner, this displays what gesture is actively processing. If you make a fist while the size picker is locked out, it updates to an orange alert: `STATUS: SIZE LOCKED (WAIT)`.
-* **System Feedback Flashes:** When a settings swap successfully fires, a bold text banner flashes in the center of your view for roughly 1.5 seconds (45 frames) to call out the change.
+| Element | Location | What it shows |
+|---|---|---|
+| **Toolbar** | Top strip (70 px tall) | Color swatches + brush size dots; selected ones are highlighted |
+| **Size cooldown timer** | Top-right of toolbar | `SIZE LOCK: 3.4s` — orange countdown when size changes are blocked |
+| **Status label** | Bottom-left | Current gesture name in a matching color |
+| **Lock zone box** | Bottom-right corner | Green (`LOCK: ACTIVE`) or red (`LOCK: OFF`) with a faint fill |
+| **Cursor ring** | Around index fingertip | Sized brush ring when drawing; large orange ring when erasing; grey ring otherwise |
+| **Flash banner** | Screen center | Big text for ~1.5 s (45 frames) after a color or size change fires |
+| **Help cheat-sheet** | Top-right | Small static text listing each gesture |
 
 ---
 
-## The Main Loop — How It All Runs
+## The Main Loop
 
 File: `main.py`
 
-The core script executes a tight **system loop**, repeating these steps roughly 30 times per second until a user terminates the program:
+Everything runs inside a single loop that repeats ~30 times per second:
 
 ```
-1. Capture an image frame from your attached webcam.
-2. Mirror the frame horizontally so your movements feel intuitive.
-3. Feed the image array into the MediaPipe AI HandLandmarker engine.
-4. Separate hand landmarks by their physical coordinates:
-     - Is the hand coordinate X > 900 (Right 30%)? → Check for fist → If found, flag Lock Detected.
-     - Is the hand coordinate X <= 900 (Left 70%)? → Check shape → Identify Painter Gesture.
-5. Cooldown Management: Calculate exact time elapsed since the last brush size modification.
-6. Process Gestures based on Priority:
-     - Is it a COLOR pinch? → Advance selected color palette index.
-     - Is it a THICKNESS fist? → Is Cooldown at 0.0s? 
-          ↳ YES: Increment brush size, save time stamp, reset 5s window.
-          ↳ NO: Override status name to "THICKNESS_COOLDOWN".
-     - Is the right-hand Safety Lock engaged?
-          ↳ DRAW gesture → Draw smooth line paths at index fingertip location.
-          ↳ ERASE gesture → Clear transparent pixel values surrounding the index tip.
-7. Perform alpha blending calculations to fuse your canvas layer onto the video frame.
-8. Layer the UI artwork, bounding boxes, text strings, and countdown values on top.
-9. Render the final composite image into a display window.
-10. Check keyboard state: If 'q' is pressed, break loop, release camera, and terminate.
-
+1.  Read a frame from the webcam.
+2.  Mirror it horizontally (so left/right feel natural, like a mirror).
+3.  Convert BGR → RGB and wrap it for MediaPipe.
+4.  Build a monotonically increasing timestamp (MediaPipe VIDEO mode requires this).
+5.  Run hand detection → get up to 2 sets of 21 landmarks.
+6.  Sort each detected hand by wrist X position:
+      wrist.x > 900  →  right/lock zone  →  check for fist  →  update lock state
+      wrist.x ≤ 900  →  painter zone     →  classify gesture
+7.  Update lock state (apply anti-flicker grace counter).
+8.  Calculate remaining size cooldown.
+9.  Act on the painter gesture (priority order):
+      COLOR  →  advance color index (edge-triggered)
+      SIZE   →  advance size index if cooldown = 0 (edge-triggered)
+      DRAW   →  if lock active: draw stroke
+      ERASE  →  if lock active: erase circle
+10. Alpha-blend canvas onto camera frame.
+11. Draw the lock zone box.
+12. Render all UI overlay elements on top.
+13. Display the final frame in the window.
+14. If 'q' pressed → release camera, close window, exit.
 ```
 
 ---
 
-## The "Anti-Flicker" System
+## File Map
 
-Computer vision engines occasionally drop track or **miss a hand for an isolated frame or two** due to rapid motion or lighting changes. Without built-in mitigation, this causes drawing tools to stutter or drop out entirely.
-
-To prevent this, the engine employs an internal grace period counter called `lock_smoothing_frames`. When a lock gesture is validated, this counter is instantly set to `10`. If the tracking engine drops your hand for a frame, the counter drops by 1 but keeps the drawing engine active. The lock only disengages if the gesture is completely missing for 10 sequential frames, smoothly absorbing momentary tracking drops.
-
----
-
-## Libraries Used
-
-| Library | Functional Responsibility |
-| --- | --- |
-| `opencv-python` (`cv2`) | Handles webcam hardware access, drawing geometries, font rendering, and window output. |
-| `mediapipe` | Utilizes localized machine learning models to track 21 skeletal hand coordinates in real time. |
-| `numpy` | Manages the high-speed multi-channel matrix math arrays required to process pixel layouts. |
+```
+main.py              — Orchestrator. Loop, state, gesture routing, compositing.
+gesture_detector.py  — Reads 21 landmarks, returns a Gesture enum value.
+canvas.py            — BGRA NumPy layer: strokes, erase, undo, save, alpha-blend.
+ui_overlay.py        — Toolbar, cursors, labels, flash banners, help text.
+hand_landmarker.task — Pre-built Google AI model binary. Do not modify.
+requirements         — pip dependency list (opencv, mediapipe, numpy).
+```
 
 ---
 
+## Libraries
+
+| Library | What it does in this project |
+|---|---|
+| `opencv-python` (`cv2`) | Webcam capture, image drawing primitives, font rendering, display window |
+| `mediapipe` | Runs the hand landmark AI model, returns 21 joint positions per hand |
+| `numpy` | Stores the canvas as a fast pixel array; used for alpha-blend maths |
+
+---
+
+## About `hand_landmarker.task`
+
+This is a pre-trained AI model from Google's **MediaPipe Solutions** library. You don't write it — you download it once and drop it in the project folder.
+
+- **Official page:** [developers.google.com/mediapipe/solutions/vision/hand_landmarker](https://developers.google.com/mediapipe/solutions/vision/hand_landmarker)
+- **Direct download:**
+
+```bash
+curl -o hand_landmarker.task \
+  https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task
+```
