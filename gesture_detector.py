@@ -8,7 +8,7 @@ from typing import Optional, Tuple, List
 
 
 # All possible gestures the app understands
-class Gesture(Enum):
+class Gesture(Enum):                        # Enum (each member is a Gesture value)
     DRAW      = auto()   # index finger only — draw a line
     HOVER     = auto()   # index + middle — move cursor without drawing
     ERASE     = auto()   # all 4 fingers open — erase nearby strokes
@@ -20,35 +20,35 @@ class Gesture(Enum):
 
 # A small container that bundles the gesture result with useful pixel positions
 @dataclass
-class GestureResult:
-    gesture:    Gesture                     # which gesture was detected
-    index_tip:  Optional[Tuple[int, int]]   # pixel (x, y) of the index fingertip
-    thumb_tip:  Optional[Tuple[int, int]]   # pixel (x, y) of the thumb tip
-    confidence: float                       # always 1.0 for now (reserved for future)
+class GestureResult:                            # dataclass (auto-generated __init__)
+    gesture:    Gesture                          # enum value
+    index_tip:  Optional[Tuple[int, int]]        # tuple[int, int] | None
+    thumb_tip:  Optional[Tuple[int, int]]        # tuple[int, int] | None
+    confidence: float                            # float
 
 
 class GestureDetector:
     # MediaPipe landmark indices — each number refers to a specific joint on the hand
-    WRIST      = 0
-    THUMB_TIP  = 4;  THUMB_IP   = 3   # thumb tip and the joint just below it
-    INDEX_TIP  = 8;  INDEX_PIP  = 6   # index finger tip and middle joint
-    MIDDLE_TIP = 12; MIDDLE_PIP = 10
-    RING_TIP   = 16; RING_PIP   = 14
-    PINKY_TIP  = 20; PINKY_PIP  = 18
+    WRIST      = 0                    # int
+    THUMB_TIP  = 4;  THUMB_IP   = 3   # ints — thumb tip and joint just below
+    INDEX_TIP  = 8;  INDEX_PIP  = 6   # ints — index tip and middle joint
+    MIDDLE_TIP = 12; MIDDLE_PIP = 10  # ints
+    RING_TIP   = 16; RING_PIP   = 14  # ints
+    PINKY_TIP  = 20; PINKY_PIP  = 18  # ints
 
     # If the distance between thumb and index tip (in normalized 0-1 coords) is
     # below this value, we consider it a pinch
-    PINCH_THRESHOLD = 0.08
+    PINCH_THRESHOLD = 0.08            # float
 
     # A finger must be this many units higher than its middle joint to count as "up"
     # (prevents borderline half-bent fingers from triggering incorrectly)
-    FINGER_UP_THRESHOLD = 0.02
+    FINGER_UP_THRESHOLD = 0.02        # float
 
     def __init__(self):
         # These are kept for future gesture-smoothing logic (not yet used)
-        self._prev_gesture        = Gesture.UNKNOWN
-        self._gesture_hold_frames = 0
-        self._hold_required       = 2
+        self._prev_gesture        = Gesture.UNKNOWN   # Gesture enum
+        self._gesture_hold_frames = 0                  # int
+        self._hold_required       = 2                  # int
 
     def detect_tasks(self, lm_list: List, frame_w: int, frame_h: int) -> GestureResult:
         """
@@ -58,26 +58,26 @@ class GestureDetector:
         """
 
         # Convert the two fingertips we care about most into pixel coordinates
-        index_tip_px = self._to_px(lm_list[self.INDEX_TIP], frame_w, frame_h)
-        thumb_tip_px = self._to_px(lm_list[self.THUMB_TIP], frame_w, frame_h)
+        index_tip_px = self._to_px(lm_list[self.INDEX_TIP], frame_w, frame_h)   # tuple[int, int]
+        thumb_tip_px = self._to_px(lm_list[self.THUMB_TIP], frame_w, frame_h)   # tuple[int, int]
 
         # A finger is "up" if its tip is higher on screen than its middle joint.
         # In screen coordinates y=0 is the TOP, so "higher" = smaller y value.
-        index_up  = lm_list[self.INDEX_TIP].y  < lm_list[self.INDEX_PIP].y  - self.FINGER_UP_THRESHOLD
-        middle_up = lm_list[self.MIDDLE_TIP].y < lm_list[self.MIDDLE_PIP].y - self.FINGER_UP_THRESHOLD
-        ring_up   = lm_list[self.RING_TIP].y   < lm_list[self.RING_PIP].y   - self.FINGER_UP_THRESHOLD
-        pinky_up  = lm_list[self.PINKY_TIP].y  < lm_list[self.PINKY_PIP].y  - self.FINGER_UP_THRESHOLD
+        index_up  = lm_list[self.INDEX_TIP].y  < lm_list[self.INDEX_PIP].y  - self.FINGER_UP_THRESHOLD   # bool
+        middle_up = lm_list[self.MIDDLE_TIP].y < lm_list[self.MIDDLE_PIP].y - self.FINGER_UP_THRESHOLD   # bool
+        ring_up   = lm_list[self.RING_TIP].y   < lm_list[self.RING_PIP].y   - self.FINGER_UP_THRESHOLD   # bool
+        pinky_up  = lm_list[self.PINKY_TIP].y  < lm_list[self.PINKY_PIP].y  - self.FINGER_UP_THRESHOLD   # bool
 
         # Count how many of the four outer fingers are extended
-        fingers_up_count = sum([index_up, middle_up, ring_up, pinky_up])
+        fingers_up_count = sum([index_up, middle_up, ring_up, pinky_up])   # int (from list[bool])
 
         # Measure how close the thumb tip is to the index tip (normalized distance)
-        pinch_dist = self._dist(lm_list[self.THUMB_TIP], lm_list[self.INDEX_TIP])
-        is_pinch   = pinch_dist < self.PINCH_THRESHOLD
+        pinch_dist = self._dist(lm_list[self.THUMB_TIP], lm_list[self.INDEX_TIP])   # float
+        is_pinch   = pinch_dist < self.PINCH_THRESHOLD                              # bool
 
         # Map the physical hand shape to a Gesture value (priority order matters)
         if is_pinch:
-            raw = Gesture.COLOR         # thumb + index touching → color change
+            raw = Gesture.COLOR         # Gesture enum — thumb + index touching → color change
         elif fingers_up_count == 0:
             raw = Gesture.THICKNESS     # all fingers curled = fist → size / lock
         elif fingers_up_count == 4:
@@ -89,14 +89,14 @@ class GestureDetector:
         else:
             raw = Gesture.UNKNOWN
 
-        return GestureResult(raw, index_tip_px, thumb_tip_px, 1.0)
+        return GestureResult(raw, index_tip_px, thumb_tip_px, 1.0)   # GestureResult (dataclass)
 
     @staticmethod
     def _dist(a, b):
         """Euclidean distance between two landmarks in normalized (0-1) space."""
-        return math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)
+        return math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)   # float
 
     @staticmethod
     def _to_px(lm, w, h):
         """Convert a normalized landmark (0-1) to pixel coordinates."""
-        return (int(lm.x * w), int(lm.y * h))
+        return (int(lm.x * w), int(lm.y * h))   # tuple[int, int]

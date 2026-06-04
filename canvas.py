@@ -9,21 +9,21 @@ from typing import Optional, Tuple, List
 
 
 class Canvas:
-    MAX_UNDO = 20   # how many undo steps to remember
+    MAX_UNDO = 20   # int — how many undo steps to remember
 
     def __init__(self, width: int, height: int):
-        self.width  = width
-        self.height = height
+        self.width  = width                       # int
+        self.height = height                      # int
 
         # The drawing surface: a grid of pixels, each with Blue, Green, Red, Alpha values.
         # Alpha=0 means fully transparent (shows camera); Alpha=255 means fully opaque (shows paint).
-        self._layer: np.ndarray = np.zeros((height, width, 4), dtype=np.uint8)
+        self._layer: np.ndarray = np.zeros((height, width, 4), dtype=np.uint8)   # np.ndarray (BGRA, uint8)
 
         # Stack of previous canvas states for undo (most recent is at the end)
-        self._history: List[np.ndarray] = []
+        self._history: List[np.ndarray] = []      # list[np.ndarray]
 
-        self._last_pos: Optional[Tuple[int, int]] = None  # where the finger was last frame
-        self._drawing = False                              # whether a stroke is currently active
+        self._last_pos: Optional[Tuple[int, int]] = None  # tuple[int, int] | None
+        self._drawing = False                              # bool — stroke active?
 
     # ------------------------------------------------------------------ canvas ops
 
@@ -83,12 +83,6 @@ class Canvas:
         if self._history:
             self._layer = self._history.pop()  # swap in the saved copy
 
-    def save(self, directory: str = ".") -> str:
-        """Save the drawing as a transparent PNG file. Returns the file path."""
-        ts   = time.strftime("%Y%m%d_%H%M%S")
-        path = Path(directory) / f"drawing_{ts}.png"
-        cv2.imwrite(str(path), self._layer)
-        return str(path)
 
     # ------------------------------------------------------------------ blending
 
@@ -99,19 +93,19 @@ class Canvas:
         Returns a plain BGR image (no alpha channel) ready to display.
         """
         # Split the 4-channel canvas into colour channels and the alpha mask
-        b, g, r, a = cv2.split(self._layer)
-        alpha = a.astype(np.float32) / 255.0  # convert 0-255 → 0.0-1.0
+        b, g, r, a = cv2.split(self._layer)     # each: np.ndarray (uint8, 2D)
+        alpha = a.astype(np.float32) / 255.0    # np.ndarray (float32, values 0.0-1.0)
 
-        result = frame_bgr.copy().astype(np.float32)
+        result = frame_bgr.copy().astype(np.float32)   # np.ndarray (float32, BGR)
 
         # Blend each colour channel separately
-        for c_idx, channel in enumerate([b, g, r]):
+        for c_idx, channel in enumerate([b, g, r]):    # c_idx: int, channel: np.ndarray
             result[:, :, c_idx] = (
                 channel.astype(np.float32) * alpha          # painted pixels
                 + result[:, :, c_idx] * (1.0 - alpha)       # camera pixels showing through
             )
 
-        return np.clip(result, 0, 255).astype(np.uint8)  # clamp values and convert back
+        return np.clip(result, 0, 255).astype(np.uint8)  # np.ndarray (uint8, BGR)
 
     # ------------------------------------------------------------------ internal
 

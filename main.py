@@ -15,14 +15,14 @@ from ui_overlay import UIOverlay, PALETTE, BRUSH_SIZES
 
 def main():
     # Open the default webcam (index 0) and request 1280x720 resolution
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(0)             # cv2.VideoCapture object
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
     # Create our three helper objects — one per "department"
-    detector = GestureDetector()          # reads hand shapes
-    ui       = UIOverlay(1280, 720)       # draws the toolbar and indicators
-    canvas   = Canvas(1280, 720)          # holds the drawing layer
+    detector = GestureDetector()          # GestureDetector instance
+    ui       = UIOverlay(1280, 720)       # UIOverlay instance
+    canvas   = Canvas(1280, 720)          # Canvas instance
 
     # Load the pre-built MediaPipe AI model from disk
     base_options = python.BaseOptions(model_asset_path='hand_landmarker.task')
@@ -36,35 +36,35 @@ def main():
     landmarker = vision.HandLandmarker.create_from_options(options)
 
     # --- Persistent state across frames ---
-    color_idx, size_idx = 0, 2          # which color and brush size are selected
-    prev_gesture = Gesture.UNKNOWN      # tracks last frame's gesture for edge-triggering
+    color_idx, size_idx = 0, 2          # ints — indices into PALETTE / BRUSH_SIZES
+    prev_gesture = Gesture.UNKNOWN      # Gesture enum — tracks last frame's gesture for edge-triggering
 
     # Cooldown: prevents accidental brush-size changes for 5 s after each change
-    last_size_change_time = 0.0
-    COOLDOWN_DURATION     = 5.0         # seconds
+    last_size_change_time = 0.0         # float (seconds, time.time())
+    COOLDOWN_DURATION     = 5.0         # float — seconds
 
     # Anti-flicker: keeps the lock active for up to 10 frames after the fist disappears
-    lock_active           = False
-    lock_smoothing_frames = 0
-    LOCK_TIMEOUT          = 10          # frames of grace period
+    lock_active           = False       # bool
+    lock_smoothing_frames = 0           # int
+    LOCK_TIMEOUT          = 10          # int — frames of grace period
 
     # MediaPipe VIDEO mode needs monotonically increasing timestamps in milliseconds
-    start_time_ms    = int(time.time() * 1000)
-    last_timestamp_ms = -1
+    start_time_ms    = int(time.time() * 1000)   # int (ms)
+    last_timestamp_ms = -1                        # int (ms)
 
     # --- Main loop: runs ~30 times per second until 'q' is pressed ---
     while cap.isOpened():
-        success, frame = cap.read()
+        success, frame = cap.read()     # success: bool, frame: np.ndarray (BGR)
         if not success:
             break                       # camera disconnected — stop
 
         # Mirror the image so movements feel natural (like a mirror)
-        frame = cv2.flip(frame, 1)
-        h, w, _ = frame.shape
+        frame = cv2.flip(frame, 1)      # np.ndarray
+        h, w, _ = frame.shape           # ints (tuple unpacking from frame.shape)
 
         # Convert BGR (OpenCV default) → RGB (MediaPipe expects RGB)
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        mp_image  = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)   # np.ndarray (RGB)
+        mp_image  = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)   # mp.Image
 
         # Build a safe monotonic timestamp for MediaPipe
         current_time_ms = int(time.time() * 1000) - start_time_ms
@@ -76,24 +76,24 @@ def main():
         result = landmarker.detect_for_video(mp_image, current_time_ms)
 
         # Reset per-frame detection results
-        current_frame_lock_detected = False
-        painter_res = None
+        current_frame_lock_detected = False   # bool
+        painter_res = None                    # GestureResult | None
 
         # Loop through every hand found in this frame
-        if result.hand_landmarks:
-            for landmarks in result.hand_landmarks:
-                wrist = landmarks[0]
-                px_x  = int(wrist.x * w)  # convert normalized x (0-1) to pixel x
+        if result.hand_landmarks:             # list[list[Landmark]]
+            for landmarks in result.hand_landmarks:   # landmarks: list[Landmark] (21 points)
+                wrist = landmarks[0]          # Landmark object (.x, .y, .z floats 0-1)
+                px_x  = int(wrist.x * w)      # int — pixel x
 
                 if px_x > 900:
                     # RIGHT zone (x > 900): check for a fist to activate the lock
-                    res = detector.detect_tasks(landmarks, w, h)
+                    res = detector.detect_tasks(landmarks, w, h)   # GestureResult
                     if res.gesture == Gesture.THICKNESS:
                         current_frame_lock_detected = True
                 else:
                     # LEFT zone (x ≤ 900): this hand does the actual drawing
                     if painter_res is None:
-                        painter_res = detector.detect_tasks(landmarks, w, h)
+                        painter_res = detector.detect_tasks(landmarks, w, h)   # GestureResult
 
         # Update lock state with anti-flicker smoothing
         if current_frame_lock_detected:
@@ -106,17 +106,17 @@ def main():
                 lock_active = False         # grace period expired — lock is off
 
         # --- Process gestures ---
-        current_gesture_name = "IDLE"
-        index_tip = None
+        current_gesture_name = "IDLE"         # str
+        index_tip = None                       # tuple[int, int] | None
 
         # How many seconds of cooldown are still left for brush size changes
-        time_since_change = time.time() - last_size_change_time
-        cooldown_rem = max(0.0, COOLDOWN_DURATION - time_since_change)
+        time_since_change = time.time() - last_size_change_time   # float (seconds)
+        cooldown_rem = max(0.0, COOLDOWN_DURATION - time_since_change)   # float
 
         if painter_res:
-            current_gesture      = painter_res.gesture
-            current_gesture_name = current_gesture.name
-            index_tip            = painter_res.index_tip
+            current_gesture      = painter_res.gesture      # Gesture enum
+            current_gesture_name = current_gesture.name     # str (enum name)
+            index_tip            = painter_res.index_tip    # tuple[int, int] | None
 
             # COLOR: pinch — only fires on the frame the gesture first appears
             if current_gesture == Gesture.COLOR and prev_gesture != Gesture.COLOR:
@@ -153,13 +153,13 @@ def main():
         # --- Compose the final frame ---
 
         # Blend the transparent drawing layer on top of the camera image
-        combined = canvas.composite_onto(frame)
+        combined = canvas.composite_onto(frame)   # np.ndarray (BGR)
 
         # Draw the lock-zone bounding box (green = active, red = off)
         ui.draw_lock_zone(combined, lock_active)
 
         # Layer all other UI elements (toolbar, cursor, labels, flash) on top
-        output = ui.render(
+        output = ui.render(                       # np.ndarray (BGR, final image)
             combined, color_idx, size_idx, current_gesture_name,
             index_tip,
             (lock_active and painter_res and painter_res.gesture == Gesture.DRAW),
